@@ -1,0 +1,198 @@
+// Arquivo: BibliotecaRefatorada.cs
+using System;
+using System.Collections.Generic;
+
+namespace BibliotecaAppRefatorada
+{
+    // ---------- ENTIDADES ----------
+
+    public class Livro
+    {
+        public string Titulo { get; set; }
+        public string Autor { get; set; }
+        public string ISBN { get; set; }
+        public bool Disponivel { get; set; } = true;
+    }
+
+    public class Usuario
+    {
+        public string Nome { get; set; }
+        public int ID { get; set; }
+    }
+
+    public class Emprestimo
+    {
+        public Livro Livro { get; set; }
+        public Usuario Usuario { get; set; }
+        public DateTime DataEmprestimo { get; set; }
+        public DateTime DataDevolucaoPrevista { get; set; }
+        public DateTime? DataDevolucaoEfetiva { get; set; }
+
+        public bool EstaAtrasado()
+        {
+            return DataDevolucaoEfetiva == null && DateTime.Now > DataDevolucaoPrevista;
+        }
+
+        public double CalcularMulta()
+        {
+            if (DataDevolucaoEfetiva.HasValue && DataDevolucaoEfetiva.Value > DataDevolucaoPrevista)
+            {
+                return (DataDevolucaoEfetiva.Value - DataDevolucaoPrevista).Days * 1.0;
+            }
+            return 0;
+        }
+    }
+
+    // ---------- INTERFACES ----------
+
+    public interface INotificador
+    {
+        void Enviar(string destinatario, string mensagem);
+    }
+
+    // ---------- IMPLEMENTAÇÕES DE NOTIFICAÇÃO ----------
+
+    public class EmailNotificador : INotificador
+    {
+        public void Enviar(string destinatario, string mensagem)
+        {
+            Console.WriteLine($"[E-MAIL] Para: {destinatario} - {mensagem}");
+        }
+    }
+
+    public class SMSNotificador : INotificador
+    {
+        public void Enviar(string destinatario, string mensagem)
+        {
+            Console.WriteLine($"[SMS] Para: {destinatario} - {mensagem}");
+        }
+    }
+
+    // ---------- SERVIÇOS ----------
+
+    public class LivroService
+    {
+        private readonly List<Livro> livros = new();
+
+        public void AdicionarLivro(string titulo, string autor, string isbn)
+        {
+            livros.Add(new Livro { Titulo = titulo, Autor = autor, ISBN = isbn });
+        }
+
+        public Livro BuscarPorISBN(string isbn)
+        {
+            return livros.Find(l => l.ISBN == isbn);
+        }
+
+        public List<Livro> ListarTodos() => livros;
+    }
+
+    public class UsuarioService
+    {
+        private readonly List<Usuario> usuarios = new();
+        private readonly INotificador notificador;
+
+        public UsuarioService(INotificador notificador)
+        {
+            this.notificador = notificador;
+        }
+
+        public void AdicionarUsuario(string nome, int id)
+        {
+            usuarios.Add(new Usuario { Nome = nome, ID = id });
+            notificador.Enviar(nome, "Bem-vindo à Biblioteca!");
+        }
+
+        public Usuario BuscarPorID(int id)
+        {
+            return usuarios.Find(u => u.ID == id);
+        }
+
+        public List<Usuario> ListarTodos() => usuarios;
+    }
+
+    public class EmprestimoService
+    {
+        private readonly List<Emprestimo> emprestimos = new();
+        private readonly INotificador emailNotificador;
+        private readonly INotificador smsNotificador;
+
+        public EmprestimoService(INotificador emailNotificador, INotificador smsNotificador)
+        {
+            this.emailNotificador = emailNotificador;
+            this.smsNotificador = smsNotificador;
+        }
+
+        public bool RealizarEmprestimo(Usuario usuario, Livro livro, int dias)
+        {
+            if (!livro.Disponivel) return false;
+
+            livro.Disponivel = false;
+            emprestimos.Add(new Emprestimo
+            {
+                Livro = livro,
+                Usuario = usuario,
+                DataEmprestimo = DateTime.Now,
+                DataDevolucaoPrevista = DateTime.Now.AddDays(dias)
+            });
+
+            emailNotificador.Enviar(usuario.Nome, $"Você pegou o livro '{livro.Titulo}'.");
+            smsNotificador.Enviar(usuario.Nome, $"Empréstimo realizado: {livro.Titulo}");
+
+            return true;
+        }
+
+        public double RealizarDevolucao(Livro livro, Usuario usuario)
+        {
+            var emprestimo = emprestimos.Find(e => e.Livro == livro && e.Usuario == usuario && e.DataDevolucaoEfetiva == null);
+            if (emprestimo == null) return -1;
+
+            emprestimo.DataDevolucaoEfetiva = DateTime.Now;
+            livro.Disponivel = true;
+
+            double multa = emprestimo.CalcularMulta();
+            if (multa > 0)
+            {
+                emailNotificador.Enviar(usuario.Nome, $"Você possui uma multa de R$ {multa:F2} por atraso.");
+            }
+
+            return multa;
+        }
+
+        public List<Emprestimo> ListarTodos() => emprestimos;
+    }
+
+    // ---------- PROGRAMA PRINCIPAL ----------
+
+    class Program
+    {
+        static void Main()
+        {
+            var email = new EmailNotificador();
+            var sms = new SMSNotificador();
+
+            var livroService = new LivroService();
+            var usuarioService = new UsuarioService(email);
+            var emprestimoService = new EmprestimoService(email, sms);
+
+            // Adicionar livros
+            livroService.AdicionarLivro("Clean Code", "Robert C. Martin", "978-0132350884");
+            livroService.AdicionarLivro("Design Patterns", "Erich Gamma", "978-0201633610");
+
+            // Adicionar usuários
+            usuarioService.AdicionarUsuario("João Silva", 1);
+            usuarioService.AdicionarUsuario("Maria Oliveira", 2);
+
+            // Realizar empréstimo
+            var livro = livroService.BuscarPorISBN("978-0132350884");
+            var usuario = usuarioService.BuscarPorID(1);
+            emprestimoService.RealizarEmprestimo(usuario, livro, 7);
+
+            // Simular devolução com possível atraso
+            double multa = emprestimoService.RealizarDevolucao(livro, usuario);
+            Console.WriteLine($"Multa por atraso: R$ {multa:F2}");
+
+            Console.ReadLine();
+        }
+    }
+}
