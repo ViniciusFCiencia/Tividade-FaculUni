@@ -49,6 +49,9 @@ A seguir, estão listadas as principais violações encontradas no código origi
 
 ---
 
+Nome: VINICIUS FERREIRA CIENCIA       RA: 3022103392
+
+
 ## Parte 2: Refatoração
 
 A refatoração proposta foi baseada na separação das responsabilidades em serviços específicos, aplicação de interfaces para inversão de dependência e melhoria da legibilidade do código. O código refatorado pode ser encontrado no arquivo `BibliotecaRefatorada.cs`.
